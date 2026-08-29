@@ -1,4 +1,4 @@
-﻿name: Keep alive + daily backup
+name: Keep alive + daily backup
 # Runs twice a day. Touching the database stops the free Supabase project from
 # ever being paused for inactivity, and the JSON snapshot means the data also
 # lives permanently in this repository's git history.
