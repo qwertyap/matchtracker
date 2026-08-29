@@ -1,0 +1,42 @@
+﻿name: Keep alive + daily backup
+# Runs twice a day. Touching the database stops the free Supabase project from
+# ever being paused for inactivity, and the JSON snapshot means the data also
+# lives permanently in this repository's git history.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Supabase settings
+        id: cfg
+        run: |
+          URL=$(grep -oP 'SUPABASE_URL\s*=\s*"\K[^"]+' config.js | head -1)
+          KEY=$(grep -oP 'SUPABASE_ANON_KEY\s*=\s*"\K[^"]+' config.js | head -1)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$KEY"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+      - name: Ping + back up
+        run: |
+          mkdir -p backup
+          for T in mt_players mt_matches; do
+            curl -sS --fail --retry 3 --retry-delay 10 \
+              -H "apikey: ${{ steps.cfg.outputs.key }}" \
+              -H "Authorization: Bearer ${{ steps.cfg.outputs.key }}" \
+              "${{ steps.cfg.outputs.url }}/rest/v1/$T?select=*" -o "backup/$T.json"
+            python3 -m json.tool "backup/$T.json" > /dev/null
+            echo "$T rows: $(python3 -c "import json;print(len(json.load(open('backup/$T.json'))))")"
+          done
+      - name: Commit snapshot if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backup
+          git diff --cached --quiet || git commit -m "Backup $(date -u +%Y-%m-%d\ %H:%M) UTC"
+          git push

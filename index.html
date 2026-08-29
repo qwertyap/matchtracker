@@ -1,0 +1,200 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f766e" />
+<title>MatchTracker</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icons/icon.svg" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<section id="view-login" class="view">
+  <div class="login-wrap">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="64" height="64" />
+      <h1>Admin login</h1>
+      <p class="muted">Only admins need to sign in.</p>
+    </div>
+    <div class="card">
+      <form id="login-form" autocomplete="off">
+        <label>Username
+          <input id="login-username" type="text" required autocapitalize="none" spellcheck="false" />
+        </label>
+        <label>Password
+          <input id="login-password" type="password" required />
+        </label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+      <p id="login-msg" class="msg" role="status" aria-live="polite"></p>
+      <button id="back-btn" class="ghost wide" type="button">&#8592; Back to matches</button>
+    </div>
+  </div>
+</section>
+<section id="view-app" class="view active">
+  <header class="app-bar">
+    <div class="title">
+      <img src="icons/icon.svg" alt="" width="26" height="26" />
+      <strong>MatchTracker</strong>
+      <span id="admin-chip" class="chip chip-admin" hidden>admin</span>
+    </div>
+    <button id="admin-btn" class="ghost" type="button">Admin</button>
+    <button id="logout-btn" class="ghost" type="button" hidden>Log out</button>
+  </header>
+  <main id="main">
+    <div id="tab-new" class="tab-panel active">
+      <div id="step-setup" class="step active">
+        <div class="card">
+          <h2>New match</h2>
+          <div class="seg" id="match-type">
+            <button type="button" class="seg-btn active" data-type="1v1">1 v 1</button>
+            <button type="button" class="seg-btn" data-type="2v2">2 v 2</button>
+          </div>
+          <div class="teams">
+            <div class="team-box">
+              <h3>Side A</h3>
+              <select class="player-select" data-slot="a1"></select>
+              <select class="player-select slot-2v2" data-slot="a2"></select>
+            </div>
+            <div class="vs">vs</div>
+            <div class="team-box">
+              <h3>Side B</h3>
+              <select class="player-select" data-slot="b1"></select>
+              <select class="player-select slot-2v2" data-slot="b2"></select>
+            </div>
+          </div>
+          <button id="start-btn" class="primary big" type="button">&#9654; Start match</button>
+          <p id="setup-msg" class="msg" role="status" aria-live="polite"></p>
+        </div>
+        <p id="no-players-hint" class="muted center" hidden>
+          No players yet &mdash; an admin needs to add players first.
+        </p>
+      </div>
+      <div id="step-running" class="step">
+        <div class="card center">
+          <p class="muted m0">Match in progress</p>
+          <div id="live-matchup" class="matchup"></div>
+          <div id="timer" class="timer">00:00:00</div>
+          <p class="muted" id="started-at"></p>
+          <p class="muted" id="limit-note">Auto-stops after 30 min with no result.</p>
+          <button id="pause-btn" class="ghost wide" type="button">&#10073;&#10073; Pause timer</button>
+          <button id="end-btn" class="danger big" type="button">&#9632; End match</button>
+          <button id="cancel-btn" class="ghost wide" type="button">Cancel match</button>
+        </div>
+      </div>
+      <div id="step-score" class="step">
+        <div class="card">
+          <h2>Enter points</h2>
+          <div id="time-summary" class="time-summary"></div>
+          <div class="score-grid" id="score-grid"></div>
+          <div id="winner-block" class="winner-block" hidden>
+            <h3>Both sides reached 21 &mdash; choose the winner</h3>
+            <div id="winner-options" class="winner-options"></div>
+          </div>
+          <button id="save-btn" class="primary big" type="button">Save match</button>
+          <p id="score-msg" class="msg" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+    <div id="tab-history" class="tab-panel">
+      <div class="row-between">
+        <h2 class="m0">Match history <span id="history-count" class="chip">0</span></h2>
+      </div>
+      <div class="filters">
+        <div class="chips" id="period-chips">
+          <button class="chip-btn active" data-period="all">All</button>
+          <button class="chip-btn" data-period="today">Today</button>
+          <button class="chip-btn" data-period="week">This week</button>
+          <button class="chip-btn" data-period="month">This month</button>
+          <button class="chip-btn" data-period="date">Pick date</button>
+        </div>
+        <input type="date" id="date-pick" class="date-pick" hidden />
+        <div class="chips" id="status-chips">
+          <button class="chip-btn active" data-status="all">All status</button>
+          <button class="chip-btn" data-status="approved">Approved</button>
+          <button class="chip-btn" data-status="pending">Pending</button>
+          <button class="chip-btn" data-status="declined">Declined</button>
+        </div>
+      </div>
+      <div id="history-summary" class="stat-row"></div>
+      <ul id="history-list" class="history"></ul>
+      <p id="history-empty" class="muted center">No matches for this filter.</p>
+    </div>
+    <div id="tab-board" class="tab-panel">
+      <h2>Leaderboard</h2>
+      <div class="seg" id="board-period">
+        <button type="button" class="seg-btn active" data-bperiod="all">All time</button>
+        <button type="button" class="seg-btn" data-bperiod="month">Current month</button>
+      </div>
+      <div class="seg" id="board-cat">
+        <button type="button" class="seg-btn active" data-cat="singles">Singles</button>
+        <button type="button" class="seg-btn" data-cat="doubles">Doubles</button>
+        <button type="button" class="seg-btn" data-cat="combined">Combined</button>
+      </div>
+      <p class="muted" id="board-note">Approved matches only.</p>
+      <div id="board-list" class="board"></div>
+      <p id="board-empty" class="muted center">Nothing to rank yet.</p>
+    </div>
+    <div id="tab-players" class="tab-panel">
+      <h2>Player dashboard</h2>
+      <div class="seg" id="dash-period">
+        <button type="button" class="seg-btn active" data-dperiod="all">All time</button>
+        <button type="button" class="seg-btn" data-dperiod="month">Current month</button>
+      </div>
+      <div id="dash-summary" class="stat-row"></div>
+      <div id="dash-list" class="dash"></div>
+      <p id="dash-empty" class="muted center">No players yet.</p>
+    </div>
+    <div id="tab-admin" class="tab-panel">
+      <div class="card">
+        <h2>Add player</h2>
+        <p class="muted">Players everyone can pick when creating a match.</p>
+        <form id="add-player-form" autocomplete="off">
+          <label>Player name
+            <input id="np-name" type="text" required minlength="2" placeholder="e.g. Ayush Pandey" />
+          </label>
+          <button class="primary" type="submit">Add player</button>
+        </form>
+        <p id="player-msg" class="msg" role="status" aria-live="polite"></p>
+      </div>
+      <div class="card">
+        <h2>Players <span id="player-count" class="chip">0</span></h2>
+        <ul id="player-list" class="mini-list"></ul>
+      </div>
+      <div class="card">
+        <h2>Create admin</h2>
+        <p class="muted">Only admins sign in. Everyone else uses the app directly.</p>
+        <form id="create-user-form" autocomplete="off">
+          <label>Full name
+            <input id="nu-name" type="text" required />
+          </label>
+          <label>Username
+            <input id="nu-username" type="text" required autocapitalize="none" spellcheck="false" />
+          </label>
+          <label>Password
+            <span class="with-btn">
+              <input id="nu-password" type="text" required minlength="4" />
+              <button id="gen-pass" class="ghost" type="button">Generate</button>
+            </span>
+          </label>
+          <button class="primary" type="submit">Create admin</button>
+        </form>
+        <div id="cred-box" class="cred-box" hidden></div>
+        <p id="create-user-msg" class="msg" role="status" aria-live="polite"></p>
+      </div>
+      <div class="card">
+        <h2>Admins <span id="user-count" class="chip">0</span></h2>
+        <ul id="user-list" class="mini-list"></ul>
+      </div>
+    </div>
+  </main>
+  <nav id="tabbar" class="tabbar"></nav>
+</section>
+<script type="module" src="app.js"></script>
+</body>
+</html>
+
+

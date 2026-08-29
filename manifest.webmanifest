@@ -1,0 +1,16 @@
+{
+  "name": "MatchTracker - Badminton Match Timing & Scoring",
+  "short_name": "MatchTracker",
+  "description": "Create 1v1 or 2v2 matches, time them in IST and record the points.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#071410",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
+
