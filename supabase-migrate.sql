@@ -13,7 +13,12 @@
 -- every match they took part in (so opponents' records of those matches go
 -- too), exactly as requested.
 -- =========================================================================
-create extension if not exists pgcrypto;
+-- Supabase installs pgcrypto into the "extensions" schema, not "public".
+-- Without extensions on the search_path, crypt()/gen_salt() are not found
+-- and every password operation fails with:
+--   ERROR: function crypt(text, text) does not exist
+create extension if not exists pgcrypto with schema extensions;
+set search_path = public, extensions;
 -- ------------------------------- tables ---------------------------------
 create table if not exists public.mt_admins (
   id            uuid primary key default gen_random_uuid(),
@@ -72,12 +77,12 @@ create policy mt_matches_insert on public.mt_matches for insert to anon, authent
 -- mt_admins / mt_sessions have NO policies: password hashes are unreadable.
 -- ---------------------------- session helpers ----------------------------
 create or replace function public.mt_admin_row(p_token uuid)
-returns public.mt_admins language sql security definer set search_path = public as $$
+returns public.mt_admins language sql security definer set search_path = public, extensions as $$
   select a.* from mt_sessions s join mt_admins a on a.id = s.admin_id
   where s.token = p_token and s.expires_at > now() and a.active;
 $$;
 create or replace function public.mt_require(p_token uuid, p_super boolean)
-returns public.mt_admins language plpgsql security definer set search_path = public as $$
+returns public.mt_admins language plpgsql security definer set search_path = public, extensions as $$
 declare a mt_admins;
 begin
   a := mt_admin_row(p_token);
@@ -89,7 +94,7 @@ begin
 end $$;
 -- --------------------------------- auth ----------------------------------
 create or replace function public.mt_login(p_username text, p_password text)
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare a mt_admins; t uuid;
 begin
   select * into a from mt_admins where lower(username) = lower(btrim(p_username)) and active;
@@ -103,11 +108,11 @@ begin
                            'username', a.username, 'role', a.role);
 end $$;
 create or replace function public.mt_logout(p_token uuid)
-returns void language sql security definer set search_path = public as $$
+returns void language sql security definer set search_path = public, extensions as $$
   delete from mt_sessions where token = p_token;
 $$;
 create or replace function public.mt_me(p_token uuid)
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare a mt_admins;
 begin
   a := mt_admin_row(p_token);
@@ -116,13 +121,13 @@ begin
 end $$;
 create or replace function public.mt_list_admins(p_token uuid)
 returns table (id uuid, name text, username text, role text, active boolean)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform mt_require(p_token, true);
   return query select a.id, a.name, a.username, a.role, a.active from mt_admins a order by a.role, a.name;
 end $$;
 create or replace function public.mt_create_admin(p_token uuid, p_name text, p_username text, p_password text, p_role text default 'limited')
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare nid uuid;
 begin
   perform mt_require(p_token, true);
@@ -138,7 +143,7 @@ begin
   return json_build_object('id', nid, 'name', btrim(p_name), 'username', lower(btrim(p_username)), 'role', p_role);
 end $$;
 create or replace function public.mt_reset_password(p_token uuid, p_id uuid, p_password text)
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare a mt_admins;
 begin
   perform mt_require(p_token, true);
@@ -148,7 +153,7 @@ begin
   return json_build_object('id', a.id, 'name', a.name, 'username', a.username);
 end $$;
 create or replace function public.mt_delete_admin(p_token uuid, p_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 declare me mt_admins;
 begin
   me := mt_require(p_token, true);
@@ -159,7 +164,7 @@ end $$;
 -- Super admin adds an approved player straight away.
 -- Limited admin adds a player that waits for approval.
 create or replace function public.mt_add_player(p_token uuid, p_name text)
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare a mt_admins; nid uuid; st text;
 begin
   a := mt_require(p_token, false);
@@ -168,14 +173,14 @@ begin
   return json_build_object('id', nid, 'name', btrim(p_name), 'status', st);
 end $$;
 create or replace function public.mt_approve_player(p_token uuid, p_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform mt_require(p_token, true);
   update mt_players set status = 'approved' where id = p_id;
 end $$;
 -- Decline = remove the player AND every match they appeared in.
 create or replace function public.mt_decline_player(p_token uuid, p_id uuid)
-returns json language plpgsql security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public, extensions as $$
 declare pname text; removed int;
 begin
   perform mt_require(p_token, true);
@@ -189,27 +194,27 @@ begin
   return json_build_object('player', pname, 'matches_removed', removed);
 end $$;
 create or replace function public.mt_rename_player(p_token uuid, p_id uuid, p_name text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform mt_require(p_token, true);
   update mt_players set name = btrim(p_name) where id = p_id;
 end $$;
 create or replace function public.mt_delete_player(p_token uuid, p_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform mt_require(p_token, true);
   delete from mt_players where id = p_id;
 end $$;
 -- -------------------------------- matches --------------------------------
 create or replace function public.mt_set_match_status(p_token uuid, p_id uuid, p_status text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform mt_require(p_token, true);
   if p_status not in ('pending','approved','declined') then raise exception 'Bad status.'; end if;
   update mt_matches set status = p_status, status_changed_at = now() where id = p_id;
 end $$;
 create or replace function public.mt_delete_match(p_token uuid, p_id uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform mt_require(p_token, true);
   delete from mt_matches where id = p_id;

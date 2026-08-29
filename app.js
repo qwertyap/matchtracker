@@ -734,9 +734,18 @@ await db.init();
 admin = currentUser();
 try { admin = await refreshUser(); } catch (e) { /* offline: keep cached */ }
 applyRole();
-await refreshPlayers();
-await renderHistory();
-if (admin) { await renderPlayersAdmin(); if (isSuper()) await renderUsers(); }
+// The screen must still render if the backend is down or not set up yet,
+// otherwise a failed request leaves the user staring at a blank page.
+try {
+  await refreshPlayers();
+  await renderHistory();
+  if (admin) { await renderPlayersAdmin(); if (isSuper()) await renderUsers(); }
+} catch (err) {
+  console.error(err);
+  msg($("#setup-msg"),
+      "Cannot reach the database (" + err.message + "). " +
+      "If this project is new, run supabase-migrate.sql in the Supabase SQL editor.", "err");
+}
 showStep("setup");
 restoreLive();
 showView("app");
