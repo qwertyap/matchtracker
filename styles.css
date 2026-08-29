@@ -285,3 +285,19 @@ body.is-2v2 .slot-2v2 { display: block; }
 .timer.paused { color: var(--gold); opacity: .85; }
 #limit-note { font-size: 12px; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
 #limit-note.warn-text { color: var(--gold); }
+/* --- roles & approval queue ------------------------------------------- */
+/* `hidden` must win over the display rules used by cards/rows. */
+[hidden] { display: none !important; }
+.chip-warn {
+  background: #fef3c7;
+  color: #92400e;
+  margin-left: .5rem;
+}
+.chip-role {
+  background: #e0f2fe;
+  color: #075985;
+  margin-left: .4rem;
+  text-transform: lowercase;
+}
+#pending-list .actions { display: flex; gap: .4rem; }
+#card-pending { border-left: 3px solid #f59e0b; }

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -159,12 +159,22 @@
           <button class="primary" type="submit">Add player</button>
         </form>
         <p id="player-msg" class="msg" role="status" aria-live="polite"></p>
+        <p id="player-hint" class="muted m0" hidden></p>
+      </div>
+      <div class="card super-only" id="card-pending" hidden>
+        <h2>Waiting for your approval <span id="pending-count" class="chip">0</span></h2>
+        <p class="muted">
+          Players added by a limited admin. Approving keeps everything as normal.
+          Declining removes the player <strong>and every match they played</strong>,
+          including the opponents&#39; records of those matches.
+        </p>
+        <ul id="pending-list" class="mini-list"></ul>
       </div>
       <div class="card">
         <h2>Players <span id="player-count" class="chip">0</span></h2>
         <ul id="player-list" class="mini-list"></ul>
       </div>
-      <div class="card">
+      <div class="card super-only" id="card-create-admin">
         <h2>Create admin</h2>
         <p class="muted">Only admins sign in. Everyone else uses the app directly.</p>
         <form id="create-user-form" autocomplete="off">
@@ -180,12 +190,18 @@
               <button id="gen-pass" class="ghost" type="button">Generate</button>
             </span>
           </label>
+          <label>Role
+            <select id="nu-role">
+              <option value="limited">Limited &mdash; can only add players</option>
+              <option value="super">Super &mdash; every privilege</option>
+            </select>
+          </label>
           <button class="primary" type="submit">Create admin</button>
         </form>
         <div id="cred-box" class="cred-box" hidden></div>
         <p id="create-user-msg" class="msg" role="status" aria-live="polite"></p>
       </div>
-      <div class="card">
+      <div class="card super-only" id="card-admins">
         <h2>Admins <span id="user-count" class="chip">0</span></h2>
         <ul id="user-list" class="mini-list"></ul>
       </div>

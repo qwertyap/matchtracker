@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Cloud data layer (Supabase). Same function names the app already used, so
 // the UI code did not have to change.
 //   - players + matches are read by everyone
@@ -33,7 +33,8 @@ export async function init() { return true; }
 export async function adminLogin(username, password) {
   const out = await rpc("mt_login", { p_username: username, p_password: password });
   setToken(out.token);
-  return { id: out.id, name: out.name, username: out.username, role: "admin" };
+  // role is 'super' (all privileges) or 'limited' (can only add players)
+  return { id: out.id, name: out.name, username: out.username, role: out.role };
 }
 export async function adminLogout() {
   const t = getToken();
@@ -45,10 +46,9 @@ export async function whoAmI() {
   const t = getToken();
   if (!t) return null;
   try {
-    const admins = await rpc("mt_list_admins", { p_token: t });
-    const me = JSON.parse(localStorage.getItem("matchtracker.me") || "null");
-    if (me && admins.some((a) => a.id === me.id)) return me;
-    return me;
+    const me = await rpc("mt_me", { p_token: t });
+    if (!me) { setToken(null); return null; }
+    return { id: me.id, name: me.name, username: me.username, role: me.role };
   } catch (e) {
     setToken(null);
     return null;
@@ -58,14 +58,13 @@ export async function whoAmI() {
 export async function listUsers() {
   const t = getToken();
   if (!t) return [];
-  const rows = await rpc("mt_list_admins", { p_token: t });
-  return rows.map((r) => ({ ...r, role: "admin" }));
+  return rpc("mt_list_admins", { p_token: t });
 }
-export async function createUser({ name, username, password }) {
-  const out = await rpc("mt_create_admin", {
-    p_token: getToken(), p_name: name, p_username: username, p_password: password
+export async function createUser({ name, username, password, role }) {
+  return rpc("mt_create_admin", {
+    p_token: getToken(), p_name: name, p_username: username, p_password: password,
+    p_role: role === "super" ? "super" : "limited"
   });
-  return { ...out, role: "admin" };
 }
 export async function resetPassword(id, password) {
   return rpc("mt_reset_password", { p_token: getToken(), p_id: id, p_password: password });
@@ -74,8 +73,23 @@ export async function deleteUser(id) {
   return rpc("mt_delete_admin", { p_token: getToken(), p_id: id });
 }
 /* -------------------------------- players -------------------------------- */
+// Every player, including ones still waiting for approval (admin screens).
 export async function listPlayers() {
-  return api("/mt_players?select=id,name&order=name.asc");
+  const rows = await api("/mt_players?select=id,name,status,added_by&order=name.asc");
+  return rows.map((r) => ({
+    id: r.id, name: r.name, status: r.status || "approved", addedBy: r.added_by
+  }));
+}
+// Only approved players may be picked for a match.
+export async function listApprovedPlayers() {
+  return (await listPlayers()).filter((p) => p.status === "approved");
+}
+export async function approvePlayer(id) {
+  return rpc("mt_approve_player", { p_token: getToken(), p_id: id });
+}
+// Declining removes the player AND every match they took part in.
+export async function declinePlayer(id) {
+  return rpc("mt_decline_player", { p_token: getToken(), p_id: id });
 }
 export async function createPlayer(name) {
   const n = String(name || "").trim();

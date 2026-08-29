@@ -1,7 +1,8 @@
-﻿-- =========================================================================
+-- =========================================================================
 -- MatchTracker - Supabase schema
--- Paste ALL of this into Supabase -> SQL Editor -> New query -> Run.
--- Safe to re-run. Running it WIPES all players and matches.
+-- MIGRATION - paste into Supabase -> SQL Editor -> New query -> Run.
+-- Safe to re-run. This does NOT delete any players or matches.
+-- Use supabase-setup.sql instead only if you want a completely fresh start.
 --
 -- Accounts created:
 --   ayushp / onlybadminton   -> SUPER admin (every privilege)
@@ -213,12 +214,16 @@ begin
   perform mt_require(p_token, true);
   delete from mt_matches where id = p_id;
 end $$;
--- ------------------------- fresh start + accounts ------------------------
-delete from public.mt_matches;
-delete from public.mt_players;
-delete from public.mt_sessions;
-delete from public.mt_admins;
-insert into public.mt_admins(name, username, password_hash, role) values
-  ('Ayush Pandey', 'ayushp', crypt('onlybadminton', gen_salt('bf')), 'super'),
-  ('Match Desk',   'admin',  crypt('admin',         gen_salt('bf')), 'limited');
+-- ---------------- accounts (KEEPS all existing data) ---------------------
+-- Players that existed before approvals were introduced have no "added_by",
+-- so they are treated as already approved and stay selectable.
+update public.mt_players set status = 'approved' where added_by is null;
+insert into public.mt_admins(name, username, password_hash, role)
+values ('Ayush Pandey', 'ayushp', crypt('onlybadminton', gen_salt('bf')), 'super')
+on conflict (username) do update
+  set password_hash = excluded.password_hash, role = 'super', active = true;
+insert into public.mt_admins(name, username, password_hash, role)
+values ('Match Desk', 'admin', crypt('admin', gen_salt('bf')), 'limited')
+on conflict (username) do update
+  set password_hash = excluded.password_hash, role = 'limited', active = true;
 grant execute on all functions in schema public to anon, authenticated;

@@ -1,5 +1,5 @@
-﻿import * as db from "./store.js";
-import { currentUser, login, logout } from "./auth.js";
+import * as db from "./store.js";
+import { currentUser, login, logout, refreshUser } from "./auth.js";
 import * as stats from "./stats.js";
 /* ------------------------------- helpers -------------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -64,7 +64,7 @@ $("#login-form").addEventListener("submit", async (e) => {
     msg($("#login-msg"), "");
     applyRole();
     await renderPlayersAdmin();
-    await renderUsers();
+    if (isSuper()) await renderUsers();
     showView("app");
     const t = $('#tabbar .tab[data-tab="admin"]');
     if (t) t.click();
@@ -79,11 +79,22 @@ $("#logout-btn").addEventListener("click", async () => {
   const t = $('#tabbar .tab[data-tab="new"]');
   if (t) t.click();
 });
+// 'super'   -> ayushp: every privilege
+// 'limited' -> admin: may only add players, which then need super approval
+const isSuper = () => !!admin && admin.role === "super";
 function applyRole() {
   const isAdmin = !!admin;
+  const sup = isSuper();
   $("#admin-chip").hidden = !isAdmin;
+  $("#admin-chip").textContent = sup ? "main admin" : "limited admin";
   $("#admin-btn").hidden = isAdmin;
   $("#logout-btn").hidden = !isAdmin;
+  // Everything marked super-only is hidden from limited admins.
+  $$(".super-only").forEach((el) => { el.hidden = !sup; });
+  const hint = $("#player-hint");
+  hint.hidden = !isAdmin || sup;
+  hint.textContent = "Players you add wait for the main admin to approve them " +
+    "before they can be picked for a match.";
   buildTabs();
 }
 /* ================================= TABS ================================== */
@@ -110,25 +121,33 @@ function buildTabs() {
       if (b.dataset.tab === "history") await renderHistory();
       if (b.dataset.tab === "board") await renderBoard();
       if (b.dataset.tab === "players") await renderDash();
-      if (b.dataset.tab === "admin") { await renderPlayersAdmin(); await renderUsers(); }
+      if (b.dataset.tab === "admin") { await renderPlayersAdmin(); if (isSuper()) await renderUsers(); }
     })
   );
   $$(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + active));
 }
 /* ================================ PLAYERS ================================ */
+// Only approved players can be chosen for a match.
+const selectablePlayers = () => players.filter((p) => p.status === "approved");
 async function refreshPlayers() {
   players = await db.listPlayers();
   fillSelects();
-  $("#no-players-hint").hidden = players.length > 0;
+  const ok = selectablePlayers();
+  const hint = $("#no-players-hint");
+  hint.hidden = ok.length > 0;
+  hint.textContent = players.length
+    ? "Players have been added but none are approved yet - the main admin needs to approve them."
+    : "No players yet - an admin needs to add players first.";
 }
 function fillSelects() {
+  const list = selectablePlayers();
   const opts = ['<option value="">- select player -</option>']
-    .concat(players.map((p) => '<option value="' + p.id + '">' + esc(p.name) + "</option>"))
+    .concat(list.map((p) => '<option value="' + p.id + '">' + esc(p.name) + "</option>"))
     .join("");
   $$(".player-select").forEach((sel) => {
     const keep = sel.value;
     sel.innerHTML = opts;
-    if (players.some((p) => p.id === keep)) sel.value = keep;
+    if (list.some((p) => p.id === keep)) sel.value = keep;
   });
 }
 $("#add-player-form").addEventListener("submit", async (e) => {
@@ -136,7 +155,9 @@ $("#add-player-form").addEventListener("submit", async (e) => {
   try {
     const p = await db.createPlayer($("#np-name").value);
     e.target.reset();
-    msg($("#player-msg"), "Added " + p.name + ".", "ok");
+    msg($("#player-msg"), p.status === "approved"
+      ? "Added " + p.name + "."
+      : "Added " + p.name + " - waiting for the main admin to approve.", "ok");
     await renderPlayersAdmin();
   } catch (err) {
     msg($("#player-msg"), err.message, "err");
@@ -144,14 +165,50 @@ $("#add-player-form").addEventListener("submit", async (e) => {
 });
 async function renderPlayersAdmin() {
   await refreshPlayers();
+  const sup = isSuper();
+  const waiting = players.filter((p) => p.status !== "approved");
+  // Approval queue - only the main admin sees this.
+  $("#card-pending").hidden = !sup;
+  $("#pending-count").textContent = waiting.length;
+  $("#pending-list").innerHTML = waiting.length
+    ? waiting.map((p) =>
+        "<li><span><strong>" + esc(p.name) + "</strong>" +
+        '<span class="chip chip-warn">pending</span></span><span class="actions">' +
+        '<button class="mini ok" data-approve="' + p.id + '">Approve</button>' +
+        '<button class="mini bad" data-decline="' + p.id + '" data-name="' + esc(p.name) + '">Decline</button>' +
+        "</span></li>").join("")
+    : '<li class="muted">Nothing waiting for approval.</li>';
   $("#player-count").textContent = players.length;
   $("#player-list").innerHTML = players.length
-    ? players.map((p) =>
-        "<li><span>" + esc(p.name) + "</span><span class=\"actions\">" +
-        '<button class="link" data-rename="' + p.id + '" data-name="' + esc(p.name) + '">rename</button>' +
-        '<button class="link danger-text" data-del-player="' + p.id + '">delete</button>' +
-        "</span></li>").join("")
+    ? players.map((p) => {
+        const badge = p.status === "approved" ? "" : '<span class="chip chip-warn">pending</span>';
+        return "<li><span>" + esc(p.name) + badge + "</span><span class=\"actions\">" +
+          (sup
+            ? '<button class="link" data-rename="' + p.id + '" data-name="' + esc(p.name) + '">rename</button>' +
+              '<button class="link danger-text" data-del-player="' + p.id + '">delete</button>'
+            : '<small class="muted">' + (p.status === "approved" ? "approved" : "awaiting approval") + "</small>") +
+          "</span></li>";
+      }).join("")
     : '<li class="muted">No players yet.</li>';
+  $$("[data-approve]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try { await db.approvePlayer(b.dataset.approve); await renderPlayersAdmin(); }
+      catch (err) { msg($("#player-msg"), err.message, "err"); }
+    })
+  );
+  $$("[data-decline]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Decline " + b.dataset.name + "?\n\nThis permanently removes this player AND every " +
+                   "match they played in. Those matches also disappear from their opponents' records.")) return;
+      try {
+        const out = await db.declinePlayer(b.dataset.decline);
+        msg($("#player-msg"),
+            "Declined " + out.player + " - removed " + out.matches_removed + " match(es).", "ok");
+        await renderPlayersAdmin();
+        await renderHistory();
+      } catch (err) { msg($("#player-msg"), err.message, "err"); }
+    })
+  );
   $$("[data-rename]").forEach((b) =>
     b.addEventListener("click", async () => {
       const name = prompt("New name:", b.dataset.name);
@@ -473,7 +530,7 @@ async function renderHistory() {
       '<div class="match-foot"><span>Winner: ' + esc(champ.names.join(" & ")) +
         (m.decidedManually ? " (chosen)" : "") + "</span><span>" + durationWords(m.durationMs) + "</span></div>" +
       '<div class="match-foot muted"><span>' + istTime(m.startedAt) + " to " + istTime(m.endedAt) + "</span></div>" +
-      (admin
+      (isSuper()
         ? '<div class="approve-row">' +
           '<button class="mini ok' + (st === "approved" ? " on" : "") + '" data-set="approved" data-id="' + m.id + '">Approve</button>' +
           '<button class="mini bad' + (st === "declined" ? " on" : "") + '" data-set="declined" data-id="' + m.id + '">Decline</button>' +
@@ -551,7 +608,7 @@ $$("#dash-period .seg-btn").forEach((b) =>
 async function renderDash() {
   const all = await db.listMatches();
   const scoped = stats.filterMatches(all, { period: dPeriod === "month" ? "month" : "all" });
-  const list = await db.listPlayers();
+  const list = await db.listApprovedPlayers();
   const rows = stats.playerStats(scoped, list.map((p) => p.name));
   const sum = stats.summary(scoped);
   $("#dash-summary").innerHTML =
@@ -623,12 +680,13 @@ $("#create-user-form").addEventListener("submit", async (e) => {
       name: $("#nu-name").value,
       username: $("#nu-username").value,
       password: password,
-      role: "admin"
+      role: $("#nu-role").value
     });
     e.target.reset();
     $("#nu-username").dataset.touched = "";
     showCredentials(u.name, u.username, password);
-    msg($("#create-user-msg"), "Created admin " + u.name + ".", "ok");
+    msg($("#create-user-msg"),
+        "Created " + (u.role === "super" ? "main" : "limited") + " admin " + u.name + ".", "ok");
     await renderUsers();
   } catch (err) {
     $("#cred-box").hidden = true;
@@ -642,6 +700,7 @@ async function renderUsers() {
     const canDelete = u.username !== "admin" && (!admin || u.id !== admin.id);
     return "<li><span><strong>" + esc(u.name) + '</strong><small class="muted"> @' +
       esc(u.username) + "</small>" +
+      '<span class="chip chip-role">' + (u.role === "super" ? "main" : "limited") + "</span>" +
       (u.active ? "" : '<span class="chip chip-off">disabled</span>') +
       '</span><span class="actions">' +
       '<button class="link" data-reset="' + u.id + '" data-name="' + esc(u.name) + '">reset password</button>' +
@@ -671,11 +730,13 @@ async function renderUsers() {
 }
 /* ================================ START ================================== */
 await db.init();
+// Ask the server who we are, so the role is authoritative (not localStorage).
 admin = currentUser();
+try { admin = await refreshUser(); } catch (e) { /* offline: keep cached */ }
 applyRole();
 await refreshPlayers();
 await renderHistory();
-if (admin) { await renderPlayersAdmin(); await renderUsers(); }
+if (admin) { await renderPlayersAdmin(); if (isSuper()) await renderUsers(); }
 showStep("setup");
 restoreLive();
 showView("app");

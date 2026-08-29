@@ -1,4 +1,4 @@
-﻿const CACHE = "matchtracker-v3";
+const CACHE = "matchtracker-v4";
 const ASSETS = [
   "./",
   "./index.html",
